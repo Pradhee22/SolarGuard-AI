@@ -1,0 +1,10 @@
+{
+  "voltage": 33.29,
+  "current": 8.89,
+  "power": 296.0,
+  "efficiency": 20.0,
+  "irradiance": 869,
+  "temperature": 27.8,
+  "humidity": 47.8,
+  "pressure": 1013.4
+}

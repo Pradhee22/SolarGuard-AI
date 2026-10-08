@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SolarPulse AI — Predictive Monitoring & Thermal ML Diagnostics</title>
+<meta name="description" content="Real-time photovoltaic array telemetry, AI thermal inspection and predictive maintenance powered by ESP32 edge hardware."/>
+<link rel="stylesheet" href="styles.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+  window._fbImports = { initializeApp, getDatabase, ref, onValue };
+</script>
+</head>
+<body>
+
+<!-- ============================================================
+     TOP HEADER
+     ============================================================ -->
+<header id="top-header">
+  <!-- Logo -->
+  <div class="header-logo">
+    <div class="header-logo-icon">
+      <span class="material-symbols-rounded" style="font-size:20px">solar_power</span>
+    </div>
+    <div class="header-logo-text">
+      <h1>SolarPulse AI <span class="prod-badge">PROD IoT</span></h1>
+      <p>Predictive Monitoring &amp; Edge Thermal Inspection</p>
+    </div>
+  </div>
+
+  <!-- Center Controls -->
+  <div class="header-center">
+    <!-- Panel Selector -->
+    <div class="header-select">
+      <span class="material-symbols-rounded">grid_view</span>
+      <select id="panel-selector" aria-label="Select panel">
+        <option value="SP-A104">Array Alpha – Panel 104 (SP-A104)</option>
+        <option value="SP-A101">Array Alpha – Panel 101 (SP-A101)</option>
+        <option value="SP-A102">Array Alpha – Panel 102 (SP-A102)</option>
+        <option value="SP-B201">Array Beta – Panel 201 (SP-B201)</option>
+        <option value="SP-B202">Array Beta – Panel 202 (SP-B202)</option>
+        <option value="SP-C301">Array Gamma – Panel 301 (SP-C301)</option>
+      </select>
+    </div>
+
+    <!-- Preset Selector -->
+    <div class="header-select">
+      <span class="material-symbols-rounded" style="color:#F59E0B">wb_sunny</span>
+      <select id="preset-selector" aria-label="Select weather preset">
+        <option>Preset: Clear Sky</option>
+        <option>Preset: Partly Cloudy</option>
+        <option>Preset: Overcast</option>
+        <option>Preset: Peak Summer</option>
+        <option>Preset: Monsoon</option>
+      </select>
+    </div>
+
+    <!-- AI Scan Button -->
+    <button class="btn-ai-scan" id="header-ai-scan-btn" aria-label="Run AI thermal scan">
+      <span class="material-symbols-rounded">document_scanner</span>
+      AI Scan
+    </button>
+  </div>
+
+  <!-- Right actions -->
+  <div class="header-right">
+    <div class="stream-badge" id="stream-badge">
+      <span class="stream-dot"></span>
+      <span>ESP32 Stream</span>
+    </div>
+    <button class="icon-btn" id="notif-btn" title="Notifications" aria-label="Notifications">
+      <span class="material-symbols-rounded">notifications</span>
+    </button>
+    <button class="icon-btn" id="theme-toggle-btn" title="Toggle theme" aria-label="Toggle dark/light mode">
+      <span class="material-symbols-rounded" id="theme-icon">light_mode</span>
+    </button>
+  </div>
+</header>
+
+<!-- ============================================================
+     APP BODY (sidebar + main)
+     ============================================================ -->
+<div id="app-body">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside id="sidebar">
+    <nav class="sidebar-nav" role="navigation" aria-label="Main navigation">
+      <a class="nav-item active" id="nav-dashboard" data-section="dashboard" href="#" role="menuitem" aria-current="page">
+        <span class="material-symbols-rounded">dashboard</span>
+        <span class="nav-label">Dashboard</span>
+      </a>
+      <a class="nav-item" id="nav-analytics" data-section="analytics" href="#" role="menuitem">
+        <span class="material-symbols-rounded">analytics</span>
+        <span class="nav-label">Analytics</span>
+      </a>
+      <a class="nav-item" id="nav-aiscan" data-section="aiscan" href="#" role="menuitem">
+        <span class="material-symbols-rounded">document_scanner</span>
+        <span class="nav-label">AI Scan</span>
+      </a>
+      <a class="nav-item" id="nav-maintenance" data-section="maintenance" href="#" role="menuitem">
+        <span class="material-symbols-rounded">build</span>
+        <span class="nav-label">Maintenance</span>
+      </a>
+      <a class="nav-item" id="nav-alerts" data-section="alerts" href="#" role="menuitem">
+        <span class="material-symbols-rounded">notifications_active</span>
+        <span class="nav-label">Alerts</span>
+        <span class="nav-badge" id="sidebar-alert-count">3</span>
+      </a>
+      <a class="nav-item" id="nav-settings" data-section="settings" href="#" role="menuitem">
+        <span class="material-symbols-rounded">settings</span>
+        <span class="nav-label">Settings</span>
+      </a>
+    </nav>
+
+    <!-- Array Health Panel -->
+    <div class="array-health">
+      <div class="array-health-label">
+        <span>Array Health</span>
+        <span class="array-health-status" id="health-status-text">Optimal</span>
+      </div>
+      <div class="health-bar-bg">
+        <div class="health-bar-fill" id="health-bar" style="width:87%"></div>
+      </div>
+      <div class="array-health-stats">
+        <span>Output: <strong id="health-output">218W</strong></span>
+        <span>η: <strong id="health-eta">19.5%</strong></span>
+      </div>
+    </div>
+
+    <!-- Collapse -->
+    <div class="sidebar-collapse" id="sidebar-collapse-btn" role="button" tabindex="0" aria-label="Collapse sidebar">
+      <span class="material-symbols-rounded" id="collapse-icon">chevron_left</span>
+      <span class="collapse-text">Collapse Menu</span>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main id="main-content">
+
+    <!-- ======================================================
+         DASHBOARD SECTION
+         ====================================================== -->
+    <section id="section-dashboard" class="page-section active" aria-label="Dashboard">
+
+      <!-- HERO -->
+      <div class="dash-hero">
+        <div class="hero-left">
+          <div class="live-telemetry-row">
+            <span class="live-tele-badge">LIVE TELEMETRY</span>
+            <span class="hero-breadcrumb">
+              <span>Array Alpha</span> › <span>Panel 104</span> · Section A · South
+            </span>
+          </div>
+          <h2 class="hero-title">Photovoltaic Array Telemetry &amp; Thermal ML Diagnostics</h2>
+          <p class="hero-desc">
+            Realtime high-frequency streaming from ESP32 edge MCU with INA226 voltage/current sensing, BME280 microclimate barometrics, and AI aerial thermal anomaly recognition.
+          </p>
+        </div>
+        <div class="hero-right">
+          <div class="hero-stat">
+            <div class="hero-stat-label">Est. Daily Yield</div>
+            <div class="hero-stat-value" id="hero-daily-yield">1.73<span>kWh</span></div>
+          </div>
+          <div class="hero-ai-status">
+            <div class="label">AI Status</div>
+            <div class="value" id="hero-ai-status">Clean</div>
+          </div>
+          <button class="btn-view-thermal" id="view-thermal-btn" aria-label="View Thermal AI scan">
+            <span class="material-symbols-rounded">thermostat</span>
+            View Thermal AI
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI SECTION HEADER -->
+      <div class="kpi-section-header">
+        <div class="kpi-section-title">
+          <span class="material-symbols-rounded">sensors</span>
+          Live Sensor Telemetry (INA226 + BME280 + Pyranometer)
+        </div>
+        <div class="live-stream-badge">Live Stream</div>
+      </div>
+
+      <!-- KPI GRID — Row 1 -->
+      <div class="kpi-grid" id="kpi-grid">
+
+        <!-- VOLTAGE -->
+        <div class="kpi-card" id="card-voltage">
+          <div class="kpi-card-top">
+            <div class="kpi-label-group">
+              <span class="kpi-label-text">Voltage</span>
+              <span class="kpi-unit-text">V</span>
+            </div>
+            <div class="kpi-icon icon-blue">
+              <span class="material-symbols-rounded">electric_bolt</span>
+            </div>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kv-voltage">—</span>
+            <span class="kpi-value-unit">V</span>
+          </div>
+          <div class="kpi-card-bottom">
+            <div class="kpi-trend-group">
+              <span class="kpi-trend-badge trend-stable" id="kt-voltage">
+                <span class="material-symbols-rounded">remove</span>0.0%
+              </span>
+              <span class="kpi-time" id="ktime-voltage">—</span>
+            </div>
+            <canvas class="kpi-sparkline" id="spark-voltage" aria-label="Voltage sparkline"></canvas>
+          </div>
+        </div>
+
+        <!-- CURRENT -->
+        <div class="kpi-card" id="card-current">
+          <div class="kpi-card-top">
+            <div class="kpi-label-group">
+              <span class="kpi-label-text">Current</span>
+              <span class="kpi-unit-text">A</span>
+            </div>
+            <div class="kpi-icon icon-cyan">
+              <span class="material-symbols-rounded">electric_meter</span>
+            </div>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kv-current">—</span>
+            <span class="kpi-value-unit">A</span>
+          </div>
+          <div class="kpi-card-bottom">
+            <div class="kpi-trend-group">
+              <span class="kpi-trend-badge trend-stable" id="kt-current">
+                <span class="material-symbols-rounded">remove</span>0.0%
+              </span>
+              <span class="kpi-time" id="ktime-current">—</span>
+            </div>
+            <canvas class="kpi-sparkline" id="spark-current" aria-label="Current sparkline"></canvas>
+          </div>
+        </div>
+
+        <!-- POWER OUTPUT -->
+        <div class="kpi-card" id="card-power">
+          <div class="kpi-card-top">
+            <div class="kpi-label-group">
+              <span class="kpi-label-text">Power Output</span>
+              <span class="kpi-unit-text">W</span>
+            </div>
+            <div class="kpi-icon icon-amber">
+              <span class="material-symbols-rounded">power</span>
+            </div>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kv-power">—</span>
+            <span class="kpi-value-unit">W</span>
+          </div>
+          <div class="kpi-card-bottom">
+            <div class="kpi-trend-group">
+              <span class="kpi-trend-badge trend-stable" id="kt-power">
+                <span class="material-symbols-rounded">remove</span>0.0%
+              </span>
+              <span class="kpi-time" id="ktime-power">—</span>
+            </div>
+            <canvas class="kpi-sparkline" id="spark-power" aria-label="Power sparkline"></canvas>
+          </div>
+        </div>
+
+        <!-- EFFICIENCY -->
+        <div class="kpi-card" id="card-efficiency">
+          <div class="kpi-card-top">
+            <div class="kpi-label-group">
+              <span class="kpi-label-text">Efficiency</span>
+              <span class="kpi-unit-text">%</span>
+            </div>
+            <div class="kpi-icon icon-green">
+              <span class="material-symbols-rounded">speed</span>
+            </div>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kv-efficiency">—</span>
+            <span class="kpi-value-unit">%</span>
+          </div>
+          <div class="kpi-card-bottom">
+            <div class="kpi-trend-group">
+              <span class="kpi-trend-badge trend-stable" id="kt-efficiency">
+                <span class="material-symbols-rounded">remove</span>0.0%
+              </span>
+              <span class="kpi-time" id="ktime-efficiency">—</span>
+            </div>
+            <canvas class="kpi-sparkline" id="spark-efficiency" aria-label="Efficiency sparkline"></canvas>
+          </div>
+        </div>
+
+        <!-- SOLAR IRRADIANCE -->
+        <div class="kpi-card" id="card-irradiance">
+          <div class="kpi-card-top">
+            <div class="kpi-label-group">
+              <span class="kpi-label-text">Solar Irradiance</span>
+              <span class="kpi-unit-text">W/m²</span>
+            </div>
+            <div class="kpi-icon icon-orange">
+              <span class="material-symbols-rounded">wb_sunny</span>
+            </div>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kv-irradiance">—</span>
+            <span class="kpi-value-unit">W/m²</span>
+          </div>
+          <div class="kpi-card-bottom">
+            <div class="kpi-trend-group">
+              <span class="kpi-trend-badge trend-stable" id="kt-irradiance">
+                <span class="material-symbols-rounded">remove</span>0.0%
+              </span>
+              <span class="kpi-time" id="ktime-irradiance">—</span>
+            </div>
+            <canvas class="kpi-sparkline" id="spark-irradiance" aria-label="Irradiance sparkline"></canvas>
+          </div>
+        </div>
+
+        <!-- AMBIENT TEMP -->
+        <div class="kpi-card" id="card-temp">
+          <div class="kpi-card-top">
+            <div class="kpi-label-group">
+              <span class="kpi-label-text">Ambient Temp</span>
+              <span class="kpi-unit-text">°C</span>
+            </div>
+            <div class="kpi-icon icon-red">
+              <span class="material-symbols-rounded">thermometer</span>
+            </div>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kv-temp">—</span>
+            <span class="kpi-value-unit">°C</span>
+          </div>
+          <div class="kpi-card-bottom">
+            <div class="kpi-trend-group">
+              <span class="kpi-trend-badge trend-stable" id="kt-temp">
+                <span class="material-symbols-rounded">remove</span>0.0%
+              </span>
+              <span class="kpi-time" id="ktime-temp">—</span>
+            </div>
+            <canvas class="kpi-sparkline" id="spark-temp" aria-label="Temperature sparkline"></canvas>
+          </div>
+        </div>
+
+        <!-- RELATIVE HUMIDITY -->
+        <div class="kpi-card" id="card-humidity">
+          <div class="kpi-card-top">
+            <div class="kpi-label-group">
+              <span class="kpi-label-text">Relative Humidity</span>
+              <span class="kpi-unit-text">%RH</span>
+            </div>
+            <div class="kpi-icon icon-cyan">
+              <span class="material-symbols-rounded">water_drop</span>
+            </div>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kv-humidity">—</span>
+            <span class="kpi-value-unit">%RH</span>
+          </div>
+          <div class="kpi-card-bottom">
+            <div class="kpi-trend-group">
+              <span class="kpi-trend-badge trend-stable" id="kt-humidity">
+                <span class="material-symbols-rounded">remove</span>0.0%
+              </span>
+              <span class="kpi-time" id="ktime-humidity">—</span>
+            </div>
+            <canvas class="kpi-sparkline" id="spark-humidity" aria-label="Humidity sparkline"></canvas>
+          </div>
+        </div>
+
+        <!-- ATM PRESSURE -->
+        <div class="kpi-card" id="card-pressure">
+          <div class="kpi-card-top">
+            <div class="kpi-label-group">
+              <span class="kpi-label-text">Atm. Pressure</span>
+              <span class="kpi-unit-text">hPa</span>
+            </div>
+            <div class="kpi-icon icon-violet">
+              <span class="material-symbols-rounded">compress</span>
+            </div>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kv-pressure">—</span>
+            <span class="kpi-value-unit">hPa</span>
+          </div>
+          <div class="kpi-card-bottom">
+            <div class="kpi-trend-group">
+              <span class="kpi-trend-badge trend-stable" id="kt-pressure">
+                <span class="material-symbols-rounded">remove</span>0.0%
+              </span>
+              <span class="kpi-time" id="ktime-pressure">—</span>
+            </div>
+            <canvas class="kpi-sparkline" id="spark-pressure" aria-label="Pressure sparkline"></canvas>
+          </div>
+        </div>
+
+      </div><!-- /kpi-grid -->
+    </section>
+
+    <!-- ======================================================
+         ANALYTICS SECTION
+         ====================================================== -->
+    <section id="section-analytics" class="page-section" aria-label="Analytics">
+      <div class="section-header">
+        <div class="section-header-left">
+          <h3>Analytics</h3>
+          <p>Historical performance charts and trends</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-secondary" id="export-csv-btn" aria-label="Export data as CSV">
+            <span class="material-symbols-rounded">download</span>Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <!-- Power & Voltage -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Power & Voltage Trend</div>
+              <div class="chart-subtitle">Live rolling window</div>
+            </div>
+            <div class="chart-controls">
+              <button class="chart-period-btn active" data-chart="pv" data-period="1h">1H</button>
+              <button class="chart-period-btn" data-chart="pv" data-period="6h">6H</button>
+              <button class="chart-period-btn" data-chart="pv" data-period="24h">24H</button>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-power-voltage" aria-label="Power and voltage chart"></canvas></div>
+        </div>
+
+        <!-- Efficiency -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Efficiency Over Time</div>
+              <div class="chart-subtitle">Panel conversion %</div>
+            </div>
+            <div class="chart-controls">
+              <button class="chart-period-btn active" data-chart="eff" data-period="1h">1H</button>
+              <button class="chart-period-btn" data-chart="eff" data-period="6h">6H</button>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-efficiency" aria-label="Efficiency chart"></canvas></div>
+        </div>
+
+        <!-- Environmental -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Environmental Conditions</div>
+              <div class="chart-subtitle">Temperature, Humidity, Irradiance</div>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-env" aria-label="Environmental conditions chart"></canvas></div>
+        </div>
+
+        <!-- Daily Energy -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Daily Energy Generation</div>
+              <div class="chart-subtitle">kWh per day (last 7 days)</div>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-daily" aria-label="Daily energy generation chart"></canvas></div>
+        </div>
+
+        <!-- Current vs Voltage -->
+        <div class="chart-card full-width">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">I–V Characteristic Curve</div>
+              <div class="chart-subtitle">Current-Voltage relationship — real-time scatter</div>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-iv" aria-label="IV curve chart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================
+         AI SCAN SECTION
+         ====================================================== -->
+    <section id="section-aiscan" class="page-section" aria-label="AI Thermal Scan">
+      <div class="section-header">
+        <div class="section-header-left">
+          <h3>AI Thermal Inspection</h3>
+          <p>FLIR aerial scan — ML anomaly classification</p>
+        </div>
+        <div class="section-header">
+  ...
+  <button class="btn btn-primary" id="run-scan-btn">
+    <span class="material-symbols-rounded">document_scanner</span>
+    Run New Scan
+  </button>
+</div>
+
+<input type="file" id="thermalInput" accept="image/*" hidden>
+
+<div class="ai-grid">
+
+<button class="btn btn-primary" id="run-scan-btn">
+  <span class="material-symbols-rounded">document_scanner</span>
+  Run New Scan
+</button>
+
+<input type="file" id="thermalInput" accept="image/*" hidden>
+
+      <div class="ai-grid">
+        <!-- Left: image + meta -->
+        <div style="display:flex;flex-direction:column;gap:var(--gap);">
+          <div class="glass-card">
+            <div class="thermal-img-wrap">
+             <img id="thermal-scan-image" src="thermal_scan.jpg" alt="FLIR thermal scan of solar panel array"/>
+              <div class="thermal-overlay"></div>
+              <div class="thermal-overlay-info">
+               <span class="ai-badge-sm active" id="ai-status-badge">
+  <span class="material-symbols-rounded" style="font-size:14px">check_circle</span>
+  <span id="ai-badge-label">Clean — No Anomaly</span>
+</span>
+                <button class="view-full-btn" id="view-fullscreen-btn" aria-label="View thermal scan full screen">
+                  <span class="material-symbols-rounded">open_in_full</span>Full Screen
+                </button>
+              </div>
+            </div>
+
+            <div style="padding:16px 18px;">
+              <div class="ai-meta-grid">
+                <div class="ai-meta-item">
+                  <label>Scan ID</label>
+                  <span id="scan-id">TS-2024-0847</span>
+                </div>
+                <div class="ai-meta-item">
+                  <label>Panel</label>
+                  <span id="scan-panel">SP-A104 · Section A</span>
+                </div>
+                <div class="ai-meta-item">
+                  <label>Resolution</label>
+                  <span>320×240 px FLIR</span>
+                </div>
+                <div class="ai-meta-item">
+                  <label>Scan Time</label>
+                  <span id="scan-time">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Next Scan Countdown -->
+          <div class="glass-card padded">
+            <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Next Scheduled Scan</div>
+            <div class="countdown-row">
+              <div class="cd-unit"><div class="cd-n" id="cd-days" style="color:var(--blue)">2</div><div class="cd-l">Days</div></div>
+              <div class="cd-unit"><div class="cd-n" id="cd-hrs" style="color:var(--violet)">14</div><div class="cd-l">Hrs</div></div>
+              <div class="cd-unit"><div class="cd-n" id="cd-min" style="color:var(--emerald)">32</div><div class="cd-l">Min</div></div>
+              <div class="cd-unit"><div class="cd-n" id="cd-sec" style="color:var(--amber)">00</div><div class="cd-l">Sec</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: AI results -->
+        <div class="glass-card">
+          <div class="ai-results">
+            <div class="ai-class-header">
+              <div class="ai-class-icon icon-green" id="ai-class-icon">
+                <span class="material-symbols-rounded" id="ai-class-ico-sym">check_circle</span>
+              </div>
+              <div>
+                <div class="ai-class-name" id="ai-class-name" style="color:var(--emerald)">Clean Panel</div>
+                <div class="ai-class-meta">
+                  <span class="severity-badge sev-low" id="ai-sev-badge">Low Risk</span>
+                  &nbsp;·&nbsp; <span id="ai-scan-date">Scanned today</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="confidence-section">
+              <div class="conf-label">
+                <span>Model Confidence</span>
+                <span id="conf-pct">97.3%</span>
+              </div>
+              <div class="conf-bar-bg">
+                <div class="conf-bar-fill" id="conf-bar" style="width:97.3%"></div>
+              </div>
+            </div>
+
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Detection Breakdown</div>
+            <div class="detection-list" id="detection-list">
+              <div class="detection-item">
+                <div class="det-icon icon-green"><span class="material-symbols-rounded">check</span></div>
+                <div class="det-info">
+                  <h4>No Hot Spots Detected</h4>
+                  <p>Surface temp within normal range (28–32°C)</p>
+                </div>
+                <span class="det-pct" style="color:var(--emerald)">0 zones</span>
+              </div>
+              <div class="detection-item">
+                <div class="det-icon icon-green"><span class="material-symbols-rounded">check</span></div>
+                <div class="det-info">
+                  <h4>Soiling Index: Minimal</h4>
+                  <p>Dust deposition estimated at &lt;2% output loss</p>
+                </div>
+                <span class="det-pct" style="color:var(--emerald)">1.8%</span>
+              </div>
+              <div class="detection-item">
+                <div class="det-icon icon-green"><span class="material-symbols-rounded">check</span></div>
+                <div class="det-info">
+                  <h4>PID Effect: None</h4>
+                  <p>Potential-induced degradation not detected</p>
+                </div>
+                <span class="det-pct" style="color:var(--emerald)">0.0%</span>
+              </div>
+              <div class="detection-item">
+                <div class="det-icon icon-green"><span class="material-symbols-rounded">check</span></div>
+                <div class="det-info">
+                  <h4>Cell Crack: None</h4>
+                  <p>Electroluminescence pattern nominal</p>
+                </div>
+                <span class="det-pct" style="color:var(--emerald)">0 cells</span>
+              </div>
+            </div>
+
+            <div class="rec-box">
+              <strong style="color:var(--emerald)">Recommendation:</strong> Panel operating within normal parameters. No immediate action required. Schedule routine cleaning in 21 days.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================
+         MAINTENANCE SECTION
+         ====================================================== -->
+    <section id="section-maintenance" class="page-section" aria-label="Maintenance">
+      <div class="section-header">
+        <div class="section-header-left">
+          <h3>Predictive Maintenance</h3>
+          <p>AI-driven fault prediction across the array</p>
+        </div>
+        <button class="btn btn-primary" id="refresh-maint-btn" aria-label="Refresh maintenance data">
+          <span class="material-symbols-rounded">refresh</span>Refresh
+        </button>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-pill">
+          <div class="stat-n" style="color:var(--red)" id="stat-critical">2</div>
+          <div class="stat-l">Critical</div>
+        </div>
+        <div class="stat-pill">
+          <div class="stat-n" style="color:var(--amber)" id="stat-warning">5</div>
+          <div class="stat-l">Warnings</div>
+        </div>
+        <div class="stat-pill">
+          <div class="stat-n" style="color:var(--emerald)" id="stat-healthy">19</div>
+          <div class="stat-l">Healthy</div>
+        </div>
+        <div class="stat-pill">
+          <div class="stat-n" style="color:var(--blue)" id="stat-scheduled">3</div>
+          <div class="stat-l">Scheduled</div>
+        </div>
+      </div>
+
+      <div class="maint-card">
+        <div class="table-header">
+          <h3>Maintenance Queue</h3>
+          <button class="btn btn-secondary" aria-label="Export maintenance report">
+            <span class="material-symbols-rounded">download</span>Export
+          </button>
+        </div>
+        <!-- Desktop table -->
+        <table class="data-table" id="maint-table">
+          <thead>
+            <tr>
+              <th>Panel ID</th>
+              <th>Issue</th>
+              <th>Severity</th>
+              <th>Predicted On</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="maint-table-body">
+            <!-- populated by JS -->
+          </tbody>
+        </table>
+        <!-- Mobile cards -->
+        <div class="maint-mobile" id="maint-mobile-list"></div>
+      </div>
+    </section>
+
+    <!-- ======================================================
+         ALERTS SECTION
+         ====================================================== -->
+    <section id="section-alerts" class="page-section" aria-label="Alerts">
+      <div class="section-header">
+        <div class="section-header-left">
+          <h3>Alert Center</h3>
+          <p>Threshold-driven real-time alerts</p>
+        </div>
+        <button class="btn btn-secondary" id="clear-alerts-btn" aria-label="Clear all alerts">
+          <span class="material-symbols-rounded">clear_all</span>Clear All
+        </button>
+      </div>
+
+      <div class="alerts-layout">
+        <div class="alert-list" id="alert-list">
+          <!-- populated by JS -->
+        </div>
+
+        <div class="alert-summary">
+          <h4>Summary</h4>
+          <div class="alert-stat-row">
+            <span class="alert-stat-label" style="color:var(--red)">
+              <span class="material-symbols-rounded">error</span>Critical
+            </span>
+            <span class="alert-stat-count" id="asumm-critical" style="color:var(--red)">0</span>
+          </div>
+          <div class="alert-stat-row">
+            <span class="alert-stat-label" style="color:var(--amber)">
+              <span class="material-symbols-rounded">warning</span>High
+            </span>
+            <span class="alert-stat-count" id="asumm-high" style="color:var(--amber)">0</span>
+          </div>
+          <div class="alert-stat-row">
+            <span class="alert-stat-label" style="color:var(--blue)">
+              <span class="material-symbols-rounded">info</span>Medium
+            </span>
+            <span class="alert-stat-count" id="asumm-medium" style="color:var(--blue)">0</span>
+          </div>
+          <div class="alert-stat-row">
+            <span class="alert-stat-label" style="color:var(--emerald)">
+              <span class="material-symbols-rounded">check_circle</span>Low
+            </span>
+            <span class="alert-stat-count" id="asumm-low" style="color:var(--emerald)">0</span>
+          </div>
+
+          <div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Thresholds</div>
+          <div class="threshold-list" id="threshold-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================
+         SETTINGS SECTION
+         ====================================================== -->
+    <section id="section-settings" class="page-section" aria-label="Settings">
+      <div class="section-header">
+        <div class="section-header-left">
+          <h3>Settings</h3>
+          <p>System configuration and preferences</p>
+        </div>
+      </div>
+
+      <div class="settings-grid">
+        <!-- Display -->
+        <div class="settings-card">
+          <div class="settings-title">
+            <span class="material-symbols-rounded">display_settings</span>Display
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Dark Mode</div>
+              <div class="setting-desc">Use dark theme across the dashboard</div>
+            </div>
+            <div class="toggle on" id="toggle-darkmode" role="switch" aria-checked="true" tabindex="0"></div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Update Interval</div>
+              <div class="setting-desc">Live data refresh rate</div>
+            </div>
+            <select class="styled-select" id="update-interval">
+              <option value="2000">2 seconds</option>
+              <option value="3000" selected>3 seconds</option>
+              <option value="5000">5 seconds</option>
+              <option value="10000">10 seconds</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Compact KPI Cards</div>
+              <div class="setting-desc">Reduce card padding for more data</div>
+            </div>
+            <div class="toggle" id="toggle-compact" role="switch" aria-checked="false" tabindex="0"></div>
+          </div>
+        </div>
+
+        <!-- Alerts -->
+        <div class="settings-card">
+          <div class="settings-title">
+            <span class="material-symbols-rounded">notifications_active</span>Alert Thresholds
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Over-Temperature Alert</div>
+              <div class="setting-desc">Trigger above °C</div>
+            </div>
+            <input type="number" id="thresh-temp" value="45" min="30" max="80" style="width:60px;padding:5px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--bg-3);color:var(--text-primary);font-family:'Inter',sans-serif;font-size:13px;text-align:center;outline:none;"/>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Low Efficiency Alert</div>
+              <div class="setting-desc">Trigger below %</div>
+            </div>
+            <input type="number" id="thresh-eff" value="12" min="5" max="25" style="width:60px;padding:5px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--bg-3);color:var(--text-primary);font-family:'Inter',sans-serif;font-size:13px;text-align:center;outline:none;"/>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Low Power Alert</div>
+              <div class="setting-desc">Trigger below W</div>
+            </div>
+            <input type="number" id="thresh-power" value="50" min="10" max="300" style="width:60px;padding:5px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--bg-3);color:var(--text-primary);font-family:'Inter',sans-serif;font-size:13px;text-align:center;outline:none;"/>
+          </div>
+        </div>
+
+        <!-- Hardware -->
+        <div class="settings-card">
+          <div class="settings-title">
+            <span class="material-symbols-rounded">memory</span>Hardware
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Demo Mode</div>
+              <div class="setting-desc">Use simulated sensor data</div>
+            </div>
+            <div class="toggle on" id="toggle-demo" role="switch" aria-checked="true" tabindex="0"></div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">ESP32 Node ID</div>
+              <div class="setting-desc">Edge device identifier</div>
+            </div>
+            <span style="font-size:12px;font-weight:600;color:var(--blue)">ESP32-A104</span>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Firmware Version</div>
+              <div class="setting-desc">Over-the-air update available</div>
+            </div>
+            <span style="font-size:12px;font-weight:600;color:var(--amber)">v2.4.1</span>
+          </div>
+        </div>
+
+        <!-- Firebase -->
+        <div class="settings-card">
+          <div class="settings-title">
+            <span class="material-symbols-rounded">cloud</span>Firebase Connection
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Connection Status</div>
+            </div>
+            <span class="stream-badge" style="font-size:11px;padding:4px 10px;" id="fb-status-badge">
+              <span class="stream-dot"></span>Demo Mode
+            </span>
+          </div>
+          <div class="fb-info-box">
+            To connect live hardware, open <code style="color:var(--blue)">app.js</code> and replace the <code style="color:var(--blue)">firebaseConfig</code> object with your Firebase project credentials. The dashboard will immediately stream real sensor data via <code style="color:var(--blue)">onSnapshot</code>.
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main><!-- /main-content -->
+</div><!-- /app-body -->
+
+<!-- ============================================================
+     MOBILE BOTTOM NAV
+     ============================================================ -->
+<nav id="bottom-nav" role="navigation" aria-label="Mobile navigation">
+  <div class="bottom-nav-inner">
+    <div class="bottom-nav-item active" data-section="dashboard">
+      <span class="material-symbols-rounded">dashboard</span>
+      <span>Home</span>
+    </div>
+    <div class="bottom-nav-item" data-section="analytics">
+      <span class="material-symbols-rounded">analytics</span>
+      <span>Charts</span>
+    </div>
+    <div class="bottom-nav-item" data-section="aiscan">
+      <span class="material-symbols-rounded">document_scanner</span>
+      <span>AI Scan</span>
+    </div>
+    <div class="bottom-nav-item has-badge" data-section="alerts">
+      <span class="material-symbols-rounded">notifications_active</span>
+      <span>Alerts</span>
+      <span class="nav-dot"></span>
+    </div>
+    <div class="bottom-nav-item" data-section="settings">
+      <span class="material-symbols-rounded">settings</span>
+      <span>Settings</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ============================================================
+     THERMAL MODAL (full-screen)
+     ============================================================ -->
+<div id="thermal-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-backdrop" id="modal-backdrop"></div>
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="modal-title">Thermal Scan — Full Analysis</h3>
+      <button class="modal-close" id="modal-close-btn" aria-label="Close modal">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+    </div>
+    <div class="modal-body">
+      <img class="modal-img" src="thermal_scan.jpg" alt="Full thermal scan"/>
+      <div class="modal-meta">
+        <div class="modal-meta-item">
+          <label>Classification</label>
+          <span id="modal-class" style="color:var(--emerald)">Clean Panel</span>
+        </div>
+        <div class="modal-meta-item">
+          <label>Confidence</label>
+          <span id="modal-conf">97.3%</span>
+        </div>
+        <div class="modal-meta-item">
+          <label>Severity</label>
+          <span id="modal-sev">Low Risk</span>
+        </div>
+        <div class="modal-meta-item">
+          <label>Max Temperature</label>
+          <span id="modal-maxtemp">31.4°C</span>
+        </div>
+        <div class="modal-meta-item">
+          <label>Scan ID</label>
+          <span id="modal-scanid">TS-2024-0847</span>
+        </div>
+        <div class="modal-meta-item">
+          <label>Timestamp</label>
+          <span id="modal-ts">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js" defer></script>
+</body>
+</html>
