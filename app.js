@@ -1,3 +1,4 @@
+
 /* ============================================================
    SOLARSENSE AI — app.js
    Live telemetry, demo engine, sparklines, charts, alerts
@@ -766,13 +767,46 @@ document.addEventListener('DOMContentLoaded', () => {
   const savedTheme = localStorage.getItem('sp-theme') || 'dark';
   setTheme(savedTheme === 'dark');
 
-  /* Bind nav items */
-  document.querySelectorAll('[data-section]').forEach(el => {
-    el.addEventListener('click', e => {
-      e.preventDefault();
-      showSection(el.dataset.section);
+/* Bind navigation items */
+document.querySelectorAll('.nav-item, .bottom-nav-item').forEach(el => {
+  el.addEventListener('click', function(e) {
+    e.preventDefault();
+    
+    const sectionName = this.getAttribute('data-section');
+    
+    if (!sectionName) return;
+
+    document.querySelectorAll('.page-section').forEach(section => {
+      section.classList.remove('active');
     });
+
+    const targetSection = document.getElementById('section-' + sectionName);
+
+    if (targetSection) {
+      targetSection.classList.add('active');
+    }
+
+    document.querySelectorAll('.nav-item').forEach(nav => {
+      nav.classList.remove('active');
+    });
+
+    const activeNav = document.querySelector(
+      '.nav-item[data-section="' + sectionName + '"]'
+    );
+
+    if (activeNav) {
+      activeNav.classList.add('active');
+    }
+
+    if (sectionName === 'analytics') {
+      setTimeout(() => {
+        if (typeof initAnalyticsCharts === 'function') {
+          initAnalyticsCharts();
+        }
+      }, 50);
+    }
   });
+});
 
   /* Sidebar collapse */
   document.getElementById('sidebar-collapse-btn')?.addEventListener('click', toggleSidebar);
