@@ -762,6 +762,29 @@ function bindToggle(id, onCb, offCb) {
    INIT
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
+   document.querySelectorAll('.nav-item').forEach(el => {
+  el.onclick = function(e) {
+    e.preventDefault();
+
+    const sectionName = this.dataset.section;
+
+    document.querySelectorAll('.page-section').forEach(section => {
+      section.classList.remove('active');
+    });
+
+    const target = document.getElementById('section-' + sectionName);
+
+    if (target) {
+      target.classList.add('active');
+    }
+
+    document.querySelectorAll('.nav-item').forEach(nav => {
+      nav.classList.remove('active');
+    });
+
+    this.classList.add('active');
+  };
+});
 
   /* Theme */
   const savedTheme = localStorage.getItem('sp-theme') || 'dark';
